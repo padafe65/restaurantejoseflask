@@ -4,12 +4,11 @@ from app.database import get_db
 from app.models.user import User
 from app.models.customer import Customer
 from app.auth import create_access_token, get_current_user 
-from flask_bcrypt import Bcrypt
+from app.extensions import bcrypt
 import datetime
 
 # Definimos el Blueprint (El Router de Flask)
 user_bp = Blueprint('user', __name__)
-bcrypt = Bcrypt()
 
 # --- LOGIN (Para obtener el Token) ---
 @user_bp.route("/login", methods=["POST"])
@@ -30,13 +29,12 @@ def login():
             return jsonify({"detail": "Credenciales incorrectas"}), 401
 
         print(f"Usuario encontrado: {user.username}. Verificando contraseña...")
+        print(f"DEBUG - Hash en DB: {user.password_hash[:30]}...")
+        print(f"DEBUG - Contraseña ingresada: {password}")
 
         # Verificamos la clave
-        try:
-            is_valid = bcrypt.check_password_hash(user.password_hash, password)
-        except Exception as e:
-            print(f"Aviso: Falló Bcrypt, probando texto plano. Detalle: {e}")
-            is_valid = (user.password_hash == password)
+        is_valid = bcrypt.check_password_hash(user.password_hash, password)
+        print(f"DEBUG - Resultado verificación: {is_valid}")
 
         if is_valid:
             print("✅ ¡Contraseña correcta! Generando token...")
@@ -57,7 +55,6 @@ def login():
 # --- CREAR USUARIO CON CLIENTE AUTOMÁTICO ---
 @user_bp.route("/", methods=["POST"])
 def create_user():
-    data = request.json
     db = next(get_db())
     try:
         existing_user = db.query(User).filter(User.email == data.get('email')).first()

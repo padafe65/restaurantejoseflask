@@ -54,7 +54,7 @@ if st.session_state.token is None:
             p = st.text_input("Contraseña", type="password")
             if st.form_submit_button("Entrar"):
                 try:
-                    res = requests.post(f"{API_URL}/users/login", json={"username": u, "password": p})
+                    res = requests.post(f"{API_URL}/users/login", json={"username": u, "password": p}, timeout=5)
                     if res.status_code == 200:
                         d = res.json()
                         st.session_state.token = d["access_token"]
@@ -65,8 +65,12 @@ if st.session_state.token is None:
                         st.rerun()
                     else:
                         st.error("❌ Credenciales incorrectas.")
-                except:
-                    st.error("📡 Error de conexión con el servidor.")
+                except requests.exceptions.ConnectionError:
+                    st.error("📡 Error: No se puede conectar al servidor. ¿Flask está corriendo en localhost:5000?")
+                except requests.exceptions.Timeout:
+                    st.error("📡 Error: Tiempo de espera agotado. El servidor tardó demasiado en responder.")
+                except Exception as e:
+                    st.error(f"📡 Error inesperado: {str(e)}")
         pie_de_pagina()
     st.stop() 
 

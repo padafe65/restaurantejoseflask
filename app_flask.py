@@ -1,5 +1,6 @@
 from flask import Flask
 from flask_cors import CORS
+from app.extensions import bcrypt
 
 # 1. Importamos los Blueprints desde tus carpetas de routers
 from app.routers.user import user_bp
@@ -10,6 +11,9 @@ from app.routers.customer import customer_bp
 # 2. Creamos la instancia de Flask
 app = Flask(__name__)
 CORS(app)
+
+# 3. Inicializar Bcrypt con la app
+bcrypt.init_app(app)
 
 # 3. Registro de Blueprints (Equivalente a app.include_router)
 # Nota: Primero creamos 'app' y luego registramos
