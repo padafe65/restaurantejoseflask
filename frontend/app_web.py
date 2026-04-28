@@ -236,17 +236,52 @@ if len(tabs) > 4 and rol == "admin":
             op_u = {f"{u['username']}": u for u in u_list}
             sel_u = st.selectbox("Editar Usuario:", ["-- Nuevo --"] + list(op_u.keys()))
             u_dat = op_u.get(sel_u, {"id": 0, "email": "", "username": "", "role": "cliente"})
+            
             with st.form("edit_user"):
                 un = st.text_input("Username", value=u_dat['username'])
                 em = st.text_input("Email", value=u_dat['email'])
                 ro = st.selectbox("Rol", ["admin", "mesero", "cliente"], index=["admin", "mesero", "cliente"].index(u_dat['role']))
+                
+                # --- CAMPO DE CONTRASEÑA (Solo para nuevos usuarios) ---
+                pw = None
+                if u_dat['id'] == 0:
+                    st.markdown("### 🔐 Configurar Contraseña")
+                    pw = st.text_input("Contraseña", type="password", placeholder="Ingresa una contraseña segura")
+                    pw_confirm = st.text_input("Confirmar Contraseña", type="password", placeholder="Repite la contraseña")
+                    
+                    # Validación de contraseña
+                    if pw and pw != pw_confirm:
+                        st.error("❌ Las contraseñas no coinciden")
+                    elif pw and len(pw) < 6:
+                        st.warning("⚠️ La contraseña debe tener al menos 6 caracteres")
+                
                 if st.form_submit_button("💾 Guardar"):
-                    payload = {"username": un, "email": em, "role": ro, "is_active": True}
+                    # Validación antes de enviar
                     if u_dat['id'] == 0:
-                        payload["password"] = "123456"
-                        requests.post(f"{API_URL}/users/", json=payload, headers=headers)
+                        if not pw:
+                            st.error("❌ Debes ingresar una contraseña para el nuevo usuario")
+                        elif pw != pw_confirm:
+                            st.error("❌ Las contraseñas no coinciden")
+                        elif len(pw) < 6:
+                            st.error("❌ La contraseña debe tener al menos 6 caracteres")
+                        else:
+                            payload = {"username": un, "email": em, "role": ro, "is_active": True, "password": pw}
+                            res = requests.post(f"{API_URL}/users/", json=payload, headers=headers)
+                            if res.status_code == 201:
+                                st.success(f"✅ Usuario '{un}' creado exitosamente")
+                                python_time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Error: {res.json().get('detail', 'No se pudo crear el usuario')}")
                     else:
-                        requests.put(f"{API_URL}/users/{u_dat['id']}", json=payload, headers=headers)
-                    st.rerun()
+                        # Actualizar usuario existente
+                        payload = {"username": un, "email": em, "role": ro, "is_active": True}
+                        res = requests.put(f"{API_URL}/users/{u_dat['id']}", json=payload, headers=headers)
+                        if res.status_code == 200:
+                            st.success("✅ Usuario actualizado exitosamente")
+                            python_time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Error: {res.json().get('detail', 'No se pudo actualizar el usuario')}")
 
 pie_de_pagina()
