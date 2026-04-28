@@ -55,6 +55,7 @@ def login():
 # --- CREAR USUARIO CON CLIENTE AUTOMÁTICO ---
 @user_bp.route("/", methods=["POST"])
 def create_user():
+    data = request.json
     db = next(get_db())
     try:
         existing_user = db.query(User).filter(User.email == data.get('email')).first()
