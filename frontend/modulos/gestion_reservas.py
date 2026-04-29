@@ -46,6 +46,7 @@ def render_reservas(api_url, headers, rol):
                 'id': 'Reserva #',
                 'Cliente (ID)': 'Cliente',
                 'table_id': 'ID Mesa',
+                'num_mesa_real': 'Número de Mesa',
                 'reservation_date': 'Fecha',
                 'reservation_time': 'Hora',
                 'pax': 'Pax',

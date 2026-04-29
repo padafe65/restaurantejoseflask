@@ -4,7 +4,9 @@ import pandas as pd
 from datetime import datetime
 import os
 from modulos.gestion_reservas import render_reservas
-import time as python_time 
+import time as python_time
+# Importación del nuevo módulo de componentes para el carrusel
+from modulos.componentes import render_carrusel 
 
 # --- CONFIGURACIÓN INICIAL ---
 LOGO_PATH = os.path.join("frontend", "logo_restaurante.jpg")
@@ -42,9 +44,13 @@ def pie_de_pagina():
 #                 PANTALLA DE LOGIN
 # ==========================================
 if st.session_state.token is None:
+    # --- CARRUSEL DE BIENVENIDA ---
+    # Se renderiza antes del login para captar la atención del usuario
+    render_carrusel()
+    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
         if os.path.exists(LOGO_PATH):
             st.image(LOGO_PATH, width=200)
         st.title("🔐 Acceso al Sistema")
@@ -66,9 +72,9 @@ if st.session_state.token is None:
                     else:
                         st.error("❌ Credenciales incorrectas.")
                 except requests.exceptions.ConnectionError:
-                    st.error("📡 Error: No se puede conectar al servidor. ¿Flask está corriendo en localhost:5000?")
+                    st.error("📡 Error: No se puede conectar al servidor. ¿Flask está corriendo?")
                 except requests.exceptions.Timeout:
-                    st.error("📡 Error: Tiempo de espera agotado. El servidor tardó demasiado en responder.")
+                    st.error("📡 Error: Tiempo de espera agotado.")
                 except Exception as e:
                     st.error(f"📡 Error inesperado: {str(e)}")
         pie_de_pagina()
@@ -102,8 +108,7 @@ else:
 
 tabs = st.tabs(menu)
 
-# --- PESTAÑA 0: MESAS (STAFF) o MIS RESERVAS (CLIENTE) ---
-# --- PESTAÑA 0: MESAS (STAFF) o MIS RESERVAS (CLIENTE) ---
+# --- PESTAÑA 0: MESAS ---
 with tabs[0]:
     if rol in ["admin", "mesero"]:
         st.header("🪑 Estado de las Mesas")
@@ -115,9 +120,7 @@ with tabs[0]:
             mesas_list = res_t.json()
             reservas_raw = res_r_check.json() if res_r_check.status_code == 200 else []
             
-            # --- BLOQUE DE COHERENCIA Y CONTEO ---
             for m in mesas_list:
-                # 1. Sincronización de estados (tu lógica actual)
                 tiene_reserva = any(r['table_id'] == m['id'] and r['status'] == 'confirmada' for r in reservas_raw)
                 if tiene_reserva and m['status'] == 'libre':
                     requests.put(f"{API_URL}/tables/{m['id']}", json={"status": "reservada"}, headers=headers)
@@ -126,12 +129,11 @@ with tabs[0]:
                     requests.patch(f"{API_URL}/tables/{m['id']}/release", headers=headers)
                     m['status'] = 'libre'
                 
-                # 2. NUEVA LÓGICA: Conteo de estados por mesa
+                # Conteo de estados por mesa
                 m['Confirmadas'] = sum(1 for r in reservas_raw if r['table_id'] == m['id'] and r['status'] == 'confirmada')
                 m['Canceladas'] = sum(1 for r in reservas_raw if r['table_id'] == m['id'] and r['status'] == 'cancelada')
                 m['Finalizadas'] = sum(1 for r in reservas_raw if r['table_id'] == m['id'] and r['status'] == 'finalizada')
 
-            # --- MÉTRICAS VISUALES (Se mantienen igual) ---
             cols = st.columns(4) 
             for i, mesa in enumerate(mesas_list):
                 with cols[i % 4]:
@@ -153,7 +155,6 @@ with tabs[0]:
             st.subheader("📋 Listado Detallado de Mesas")
             df_mesas = pd.DataFrame(mesas_list)
             if not df_mesas.empty:
-                # Definimos las columnas que queremos mostrar, incluyendo los nuevos conteos
                 columnas_mesas = {
                     'number': 'Mesa #',
                     'capacity': 'Capacidad',
@@ -167,6 +168,7 @@ with tabs[0]:
                     use_container_width=True,
                     hide_index=True
                 )
+
 # --- PESTAÑA 1: CLIENTES ---
 with tabs[1]:
     if rol in ["admin", "mesero"]:
@@ -176,7 +178,6 @@ with tabs[1]:
             c_list = res_c.json()
             st.dataframe(pd.DataFrame(c_list), use_container_width=True)
             st.divider()
-            # MEJORA VISUAL: Nombre con ID
             opciones_c = {f"{c['full_name']} (ID: {c['id']})": c for c in c_list}
             sel_c = st.selectbox("Seleccionar Cliente para editar:", ["-- Seleccionar --"] + list(opciones_c.keys()))
             c_sel = opciones_c.get(sel_c, {"id": 0, "full_name": "", "phone": "", "whatsapp": "", "address": ""})
@@ -242,46 +243,29 @@ if len(tabs) > 4 and rol == "admin":
                 em = st.text_input("Email", value=u_dat['email'])
                 ro = st.selectbox("Rol", ["admin", "mesero", "cliente"], index=["admin", "mesero", "cliente"].index(u_dat['role']))
                 
-                # --- CAMPO DE CONTRASEÑA (Solo para nuevos usuarios) ---
                 pw = None
                 if u_dat['id'] == 0:
                     st.markdown("### 🔐 Configurar Contraseña")
-                    pw = st.text_input("Contraseña", type="password", placeholder="Ingresa una contraseña segura")
-                    pw_confirm = st.text_input("Confirmar Contraseña", type="password", placeholder="Repite la contraseña")
-                    
-                    # Validación de contraseña
-                    if pw and pw != pw_confirm:
-                        st.error("❌ Las contraseñas no coinciden")
-                    elif pw and len(pw) < 6:
-                        st.warning("⚠️ La contraseña debe tener al menos 6 caracteres")
+                    pw = st.text_input("Contraseña", type="password")
+                    pw_confirm = st.text_input("Confirmar Contraseña", type="password")
                 
                 if st.form_submit_button("💾 Guardar"):
-                    # Validación antes de enviar
                     if u_dat['id'] == 0:
-                        if not pw:
-                            st.error("❌ Debes ingresar una contraseña para el nuevo usuario")
-                        elif pw != pw_confirm:
+                        if not pw or pw != pw_confirm:
                             st.error("❌ Las contraseñas no coinciden")
-                        elif len(pw) < 6:
-                            st.error("❌ La contraseña debe tener al menos 6 caracteres")
                         else:
                             payload = {"username": un, "email": em, "role": ro, "is_active": True, "password": pw}
                             res = requests.post(f"{API_URL}/users/", json=payload, headers=headers)
                             if res.status_code == 201:
-                                st.success(f"✅ Usuario '{un}' creado exitosamente")
+                                st.success("✅ Usuario creado")
                                 python_time.sleep(1)
                                 st.rerun()
-                            else:
-                                st.error(f"❌ Error: {res.json().get('detail', 'No se pudo crear el usuario')}")
                     else:
-                        # Actualizar usuario existente
                         payload = {"username": un, "email": em, "role": ro, "is_active": True}
                         res = requests.put(f"{API_URL}/users/{u_dat['id']}", json=payload, headers=headers)
                         if res.status_code == 200:
-                            st.success("✅ Usuario actualizado exitosamente")
+                            st.success("✅ Usuario actualizado")
                             python_time.sleep(1)
                             st.rerun()
-                        else:
-                            st.error(f"❌ Error: {res.json().get('detail', 'No se pudo actualizar el usuario')}")
 
 pie_de_pagina()

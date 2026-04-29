@@ -86,6 +86,7 @@ def get_reservations():
             "id": r.id,
             "customer_id": r.customer_id,
             "table_id": r.table_id,
+            "num_mesa_real": r.table.number if r.table else r.table_id, # <--- AGREGAMOS ESTO
             "reservation_date": str(r.reservation_date),
             "reservation_time": str(r.reservation_time),
             "status": r.status,
