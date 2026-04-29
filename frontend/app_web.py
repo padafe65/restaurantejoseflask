@@ -7,6 +7,7 @@ from modulos.gestion_reservas import render_reservas
 import time as python_time
 # Importación del nuevo módulo de componentes para el carrusel
 from modulos.componentes import render_carrusel 
+from modulos.informacion import render_info_institucional
 
 # --- CONFIGURACIÓN INICIAL ---
 LOGO_PATH = os.path.join("frontend", "logo_restaurante.jpg")
@@ -23,19 +24,29 @@ if "user_name" not in st.session_state:
     st.session_state.user_name = None
 if "user_id" not in st.session_state:
     st.session_state.user_id = None
-if "reset_u" not in st.session_state: 
-    st.session_state.reset_u = 0
+#if "reset_u" not in st.session_state: 
+#    st.session_state.reset_u = 0
+
+# VARIABLES DE RESET (Cruciales para los botones cancelar)
+if "reset_cliente_select" not in st.session_state:
+    st.session_state.reset_cliente_select = 0
+if "reset_usuario_select" not in st.session_state:
+    st.session_state.reset_usuario_select = 0
+if "reset_reserva_select" not in st.session_state:
+    st.session_state.reset_reserva_select = 0
 
 # --- 2. CONTROL DE NAVEGACIÓN ---
 if st.session_state.token is not None:
     with st.sidebar:
         if st.button("⚠️ Recordatorio: Cierre Sesión antes de salir", width='stretch'):
             st.warning("Use el botón 'Cerrar Sesión' al final de la barra lateral.")
+        if st.button("🔄 Actualizar Información", width='stretch'):
+            st.rerun()
 
 def pie_de_pagina():
     st.markdown("---")
     st.markdown(
-        "<div style='text-align: center; color: gray;'>"
+        "<div style='text-align: center; color: gray; font-weight: bold; font-size: 16px;'>"
         "© 2026 Restaurante Don José - Sistema de Gestión Interna.</div>", 
         unsafe_allow_html=True
     )
@@ -44,8 +55,11 @@ def pie_de_pagina():
 #                 PANTALLA DE LOGIN
 # ==========================================
 if st.session_state.token is None:
-    # --- CARRUSEL DE BIENVENIDA ---
-    # Se renderiza antes del login para captar la atención del usuario
+    
+    # Esto crea la barra que al abrirla muestra las pestañas y tarjetas
+    with st.expander("📌 Ver Información Institucional", expanded=False):
+        render_info_institucional()
+    
     render_carrusel()
     
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -58,7 +72,7 @@ if st.session_state.token is None:
         with st.form("login_form"):
             u = st.text_input("Correo electrónico", placeholder="ejemplo@correo.com")
             p = st.text_input("Contraseña", type="password")
-            if st.form_submit_button("Entrar"):
+            if st.form_submit_button("Entrar", width='stretch'):
                 try:
                     res = requests.post(f"{API_URL}/users/login", json={"username": u, "password": p}, timeout=5)
                     if res.status_code == 200:
@@ -72,9 +86,7 @@ if st.session_state.token is None:
                     else:
                         st.error("❌ Credenciales incorrectas.")
                 except requests.exceptions.ConnectionError:
-                    st.error("📡 Error: No se puede conectar al servidor. ¿Flask está corriendo?")
-                except requests.exceptions.Timeout:
-                    st.error("📡 Error: Tiempo de espera agotado.")
+                    st.error("📡 Error: No se puede conectar al servidor.")
                 except Exception as e:
                     st.error(f"📡 Error inesperado: {str(e)}")
         pie_de_pagina()
@@ -86,7 +98,6 @@ if st.session_state.token is None:
 headers = {"Authorization": f"Bearer {st.session_state.token}"}
 rol = st.session_state.role
 
-# --- BARRA LATERAL ---
 with st.sidebar:
     if os.path.exists(LOGO_PATH):
         st.image(LOGO_PATH, width=150)
@@ -98,7 +109,6 @@ with st.sidebar:
             del st.session_state[key]
         st.rerun()
 
-# --- DEFINICIÓN DE MENÚ SEGÚN ROL ---
 if rol == "admin":
     menu = ["🪑 Mesas", "👥 Clientes", "📅 Reservas", "📋 Auditoría", "⚙️ Usuarios"]
 elif rol == "mesero":
@@ -112,7 +122,6 @@ tabs = st.tabs(menu)
 with tabs[0]:
     if rol in ["admin", "mesero"]:
         st.header("🪑 Estado de las Mesas")
-        
         res_t = requests.get(f"{API_URL}/tables/", headers=headers)
         res_r_check = requests.get(f"{API_URL}/reservations/", headers=headers)
         
@@ -129,45 +138,23 @@ with tabs[0]:
                     requests.patch(f"{API_URL}/tables/{m['id']}/release", headers=headers)
                     m['status'] = 'libre'
                 
-                # Conteo de estados por mesa
                 m['Confirmadas'] = sum(1 for r in reservas_raw if r['table_id'] == m['id'] and r['status'] == 'confirmada')
-                m['Canceladas'] = sum(1 for r in reservas_raw if r['table_id'] == m['id'] and r['status'] == 'cancelada')
-                m['Finalizadas'] = sum(1 for r in reservas_raw if r['table_id'] == m['id'] and r['status'] == 'finalizada')
 
             cols = st.columns(4) 
             for i, mesa in enumerate(mesas_list):
                 with cols[i % 4]:
                     emoji = "🔴" if mesa['status'] == 'ocupada' else "🟡" if mesa['status'] == 'reservada' else "🟢"
                     st.metric(label=f"Mesa {mesa['number']}", value=mesa['status'].upper(), delta=emoji)
-                    
                     if mesa['status'] in ['ocupada', 'reservada']:
                         if st.button(f"🔓 Liberar #{mesa['number']}", key=f"btn_lib_{mesa['id']}"):
-                            if mesa['Confirmadas'] > 0:
-                                st.error(f"Acción bloqueada: Hay reserva activa.")
+                            if mesa.get('Confirmadas', 0) > 0:
+                                st.error("Acción bloqueada: Hay reserva activa.")
                             else:
-                                r = requests.patch(f"{API_URL}/tables/{mesa['id']}/release", headers=headers)
-                                if r.status_code == 200:
-                                    st.toast(f"Mesa {mesa['number']} LIBRE")
-                                    python_time.sleep(0.5)
-                                    st.rerun()
+                                requests.patch(f"{API_URL}/tables/{mesa['id']}/release", headers=headers)
+                                st.rerun()
 
             st.divider()
-            st.subheader("📋 Listado Detallado de Mesas")
-            df_mesas = pd.DataFrame(mesas_list)
-            if not df_mesas.empty:
-                columnas_mesas = {
-                    'number': 'Mesa #',
-                    'capacity': 'Capacidad',
-                    'status': 'Estado Actual',
-                    'Confirmadas': '✅ Confirmadas',
-                    'Canceladas': '❌ Canceladas',
-                    'Finalizadas': '🏁 Finalizadas'
-                }
-                st.dataframe(
-                    df_mesas[list(columnas_mesas.keys())].rename(columns=columnas_mesas), 
-                    use_container_width=True,
-                    hide_index=True
-                )
+            st.dataframe(pd.DataFrame(mesas_list), width="stretch", hide_index=True)
 
 # --- PESTAÑA 1: CLIENTES ---
 with tabs[1]:
@@ -176,22 +163,38 @@ with tabs[1]:
         res_c = requests.get(f"{API_URL}/customers/", headers=headers)
         if res_c.status_code == 200:
             c_list = res_c.json()
-            st.dataframe(pd.DataFrame(c_list), use_container_width=True)
+            st.dataframe(pd.DataFrame(c_list), width="stretch")
             st.divider()
+
             opciones_c = {f"{c['full_name']} (ID: {c['id']})": c for c in c_list}
-            sel_c = st.selectbox("Seleccionar Cliente para editar:", ["-- Seleccionar --"] + list(opciones_c.keys()))
+            sel_c = st.selectbox(
+                "Seleccionar Cliente para editar:", 
+                ["-- Seleccionar --"] + list(opciones_c.keys()),
+                key=f"sb_cli_{st.session_state.reset_cliente_select}" 
+            )
+            
             c_sel = opciones_c.get(sel_c, {"id": 0, "full_name": "", "phone": "", "whatsapp": "", "address": ""})
             
             if c_sel['id'] != 0:
                 with st.form("staff_edit_customer"):
+                    st.subheader(f"📝 Editando: {c_sel['full_name']}")
                     f_name = st.text_input("Nombre", value=c_sel['full_name'])
                     f_phone = st.text_input("Teléfono", value=c_sel['phone'])
                     f_ws = st.text_input("WhatsApp", value=c_sel['whatsapp'])
                     f_dir = st.text_input("Dirección", value=c_sel.get('address',''))
-                    if st.form_submit_button("💾 Guardar cambios"):
-                        payload = {"full_name": f_name, "phone": f_phone, "whatsapp": f_ws, "address": f_dir}
-                        requests.put(f"{API_URL}/customers/{c_sel['id']}", json=payload, headers=headers)
-                        st.rerun()
+                    
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.form_submit_button("💾 Guardar cambios", width="stretch"):
+                            payload = {"full_name": f_name, "phone": f_phone, "whatsapp": f_ws, "address": f_dir}
+                            requests.put(f"{API_URL}/customers/{c_sel['id']}", json=payload, headers=headers)
+                            st.success("✅ Cambios guardados")
+                            python_time.sleep(1)
+                            st.rerun()
+                    with c2:
+                        if st.form_submit_button("❌ Cancelar", width="stretch"):
+                            st.session_state.reset_cliente_select += 1
+                            st.rerun()
     else:
         st.header("👤 Mi Perfil")
         res_c = requests.get(f"{API_URL}/customers/", headers=headers)
@@ -209,7 +212,7 @@ with tabs[1]:
                     requests.put(f"{API_URL}/customers/{mi_ficha['id']}", json=payload, headers=headers)
                 else:
                     requests.post(f"{API_URL}/customers/", json=payload, headers=headers)
-                st.success("¡Perfil actualizado!")
+                st.success("✅ ¡Perfil actualizado!")
                 python_time.sleep(1)
                 st.rerun()
 
@@ -224,48 +227,59 @@ if len(tabs) > 3 and rol == "admin":
         if st.button("🔄 Consultar Logs"):
             res_l = requests.get(f"{API_URL}/reservations/logs", headers=headers)
             if res_l.status_code == 200:
-                st.dataframe(pd.DataFrame(res_l.json()), use_container_width=True)
+                st.dataframe(pd.DataFrame(res_l.json()), width='stretch')
 
+# --- PESTAÑA 4: USUARIOS ---
 if len(tabs) > 4 and rol == "admin":
     with tabs[4]:
         st.header("⚙️ Gestión de Usuarios")
         res_u = requests.get(f"{API_URL}/users/", headers=headers)
         if res_u.status_code == 200:
             u_list = res_u.json()
-            st.dataframe(pd.DataFrame(u_list), use_container_width=True)
+            st.dataframe(pd.DataFrame(u_list), width='stretch')
             st.divider()
-            op_u = {f"{u['username']}": u for u in u_list}
-            sel_u = st.selectbox("Editar Usuario:", ["-- Nuevo --"] + list(op_u.keys()))
-            u_dat = op_u.get(sel_u, {"id": 0, "email": "", "username": "", "role": "cliente"})
             
-            with st.form("edit_user"):
-                un = st.text_input("Username", value=u_dat['username'])
-                em = st.text_input("Email", value=u_dat['email'])
-                ro = st.selectbox("Rol", ["admin", "mesero", "cliente"], index=["admin", "mesero", "cliente"].index(u_dat['role']))
-                
-                pw = None
-                if u_dat['id'] == 0:
-                    st.markdown("### 🔐 Configurar Contraseña")
-                    pw = st.text_input("Contraseña", type="password")
-                    pw_confirm = st.text_input("Confirmar Contraseña", type="password")
-                
-                if st.form_submit_button("💾 Guardar"):
+            op_u = {f"{u['username']}": u for u in u_list}
+            sel_u = st.selectbox(
+                "Editar Usuario:", 
+                ["-- Seleccionar --", "-- Nuevo --"] + list(op_u.keys()),
+                key=f"sb_user_{st.session_state.reset_usuario_select}"
+            )
+            
+            if sel_u not in ["-- Seleccionar --"]:
+                u_dat = op_u.get(sel_u, {"id": 0, "email": "", "username": "", "role": "cliente"})
+                with st.form("edit_user"):
+                    un = st.text_input("Username", value=u_dat['username'])
+                    em = st.text_input("Email", value=u_dat['email'])
+                    ro = st.selectbox("Rol", ["admin", "mesero", "cliente"], index=["admin", "mesero", "cliente"].index(u_dat['role']))
+                    
+                    pw, pw_confirm = None, None
                     if u_dat['id'] == 0:
-                        if not pw or pw != pw_confirm:
-                            st.error("❌ Las contraseñas no coinciden")
-                        else:
-                            payload = {"username": un, "email": em, "role": ro, "is_active": True, "password": pw}
-                            res = requests.post(f"{API_URL}/users/", json=payload, headers=headers)
-                            if res.status_code == 201:
-                                st.success("✅ Usuario creado")
-                                python_time.sleep(1)
-                                st.rerun()
-                    else:
-                        payload = {"username": un, "email": em, "role": ro, "is_active": True}
-                        res = requests.put(f"{API_URL}/users/{u_dat['id']}", json=payload, headers=headers)
-                        if res.status_code == 200:
-                            st.success("✅ Usuario actualizado")
-                            python_time.sleep(1)
+                        st.markdown("### 🔐 Configurar Contraseña")
+                        pw = st.text_input("Contraseña", type="password")
+                        pw_confirm = st.text_input("Confirmar Contraseña", type="password")
+                    
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        if st.form_submit_button("💾 Guardar", width="stretch"):
+                            if u_dat['id'] == 0:
+                                if not pw or pw != pw_confirm:
+                                    st.error("❌ Las contraseñas no coinciden")
+                                else:
+                                    payload = {"username": un, "email": em, "role": ro, "is_active": True, "password": pw}
+                                    res = requests.post(f"{API_URL}/users/", json=payload, headers=headers)
+                                    if res.status_code == 201:
+                                        st.success("✅ Usuario creado")
+                                        python_time.sleep(1); st.rerun()
+                            else:
+                                payload = {"username": un, "email": em, "role": ro, "is_active": True}
+                                res = requests.put(f"{API_URL}/users/{u_dat['id']}", json=payload, headers=headers)
+                                if res.status_code == 200:
+                                    st.success("✅ Usuario actualizado")
+                                    python_time.sleep(1); st.rerun()
+                    with b2:
+                        if st.form_submit_button("❌ Cancelar", width="stretch"):
+                            st.session_state.reset_usuario_select += 1
                             st.rerun()
 
 pie_de_pagina()

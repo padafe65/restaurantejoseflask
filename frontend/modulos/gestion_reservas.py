@@ -18,6 +18,10 @@ def sincronizar_estados_mesas(api_url, headers, reservas_raw, mesas_list):
 def render_reservas(api_url, headers, rol):
     st.header("📅 Gestión de Reservaciones")
     
+    # --- 0. INICIALIZACIÓN PARA EVITAR ERRORES DE VARIABLE ---
+    dict_m_data = {}
+    reservas_raw = []
+
     # 1. Carga de datos
     res_r = requests.get(f"{api_url}/reservations/", headers=headers)
     res_c = requests.get(f"{api_url}/customers/", headers=headers)
@@ -36,12 +40,10 @@ def render_reservas(api_url, headers, rol):
         dict_m_label = {m['id']: f"Mesa {m['number']} | Cap: {m['capacity']}" for m in mesas}
         dict_m_data = {f"Mesa {m['number']} | Cap: {m['capacity']}": m for m in mesas}
 
-        # --- TABLA DE RESERVAS MEJORADA (Con nombres claros) ---
+        # --- TABLA DE RESERVAS ---
         df = pd.DataFrame(reservas_raw)
         if not df.empty:
-            # Creamos la columna con Nombre e ID para que sea fácil identificar
             df['Cliente (ID)'] = df['customer_id'].apply(lambda x: f"{dict_c_id_nom.get(x, 'S/N')} (ID: {x})")
-            
             columnas_visibles = {
                 'id': 'Reserva #',
                 'Cliente (ID)': 'Cliente',
@@ -52,100 +54,91 @@ def render_reservas(api_url, headers, rol):
                 'pax': 'Pax',
                 'status': 'Estado'
             }
-            # Mostramos el dataframe con los nombres de columna bonitos
-            st.dataframe(df[list(columnas_visibles.keys())].rename(columns=columnas_visibles), use_container_width=True)
+            st.dataframe(df[list(columnas_visibles.keys())].rename(columns=columnas_visibles), width='stretch', hide_index=True)
 
         st.divider()
 
-        # Selección de reserva
+        # --- SELECTOR DE RESERVA CON RESET ---
         opciones = {f"Reserva #{r['id']} - {dict_c_id_nom.get(r['customer_id'], 'S/N')}": r for r in reservas_raw}
-        sel_res = st.selectbox("🔍 Cargar reserva para editar:", ["-- Nueva Reserva --"] + list(opciones.keys()))
         
-        if sel_res == "-- Nueva Reserva --":
-            r_sel = {"id": 0, "customer_id": None, "table_id": None, "pax": 1, "status": "confirmada", 
-                     "reservation_date": str(datetime.now().date()), "reservation_time": "12:00:00"}
-        else:
-            r_sel = opciones[sel_res]
+        # Usamos la variable que definiremos en app_web.py
+        sel_res = st.selectbox(
+            "🔍 Cargar reserva para editar:", 
+            ["-- Seleccionar --", "-- Nueva Reserva --"] + list(opciones.keys()),
+            index=0,
+            key=f"sb_res_{st.session_state.get('reset_reserva_select', 0)}"
+        )
+        
+        # Solo mostrar el formulario si NO está en "-- Seleccionar --"
+        if sel_res != "-- Seleccionar --":
+            if sel_res == "-- Nueva Reserva --":
+                r_sel = {"id": 0, "customer_id": None, "table_id": None, "pax": 1, "status": "confirmada", 
+                         "reservation_date": str(datetime.now().date()), "reservation_time": "12:00:00"}
+            else:
+                r_sel = opciones[sel_res]
 
-        with st.form("form_reservas_final"):
-            st.markdown(f"### 📝 Datos de la Reserva")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                idx_c = list(dict_c_nom_id.values()).index(r_sel['customer_id']) if r_sel['customer_id'] in dict_c_nom_id.values() else 0
-                f_cliente = st.selectbox("Cliente", list(dict_c_nom_id.keys()), index=idx_c)
-                
-                label_mesa_actual = dict_m_label.get(r_sel['table_id'], list(dict_m_data.keys())[0])
-                idx_m = list(dict_m_data.keys()).index(label_mesa_actual)
-                f_mesa = st.selectbox("Mesa", list(dict_m_data.keys()), index=idx_m)
-            with col2:
-                f_date = st.date_input("Fecha", value=datetime.strptime(r_sel['reservation_date'], '%Y-%m-%d').date())
-                f_time = st.time_input("Hora", value=datetime.strptime(r_sel['reservation_time'], '%H:%M:%S').time())
-            with col3:
-                f_pax = st.number_input("Pax (Personas)", min_value=1, value=int(r_sel['pax']))
-                estados_validos = ['confirmada', 'cancelada', 'finalizada']
-                idx_est = estados_validos.index(r_sel['status']) if r_sel['status'] in estados_validos else 0
-                f_status = st.selectbox("Estado", estados_validos, index=idx_est)
+            with st.form("form_reservas_final"):
+                st.markdown(f"### 📝 Datos de la Reserva")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    idx_c = list(dict_c_nom_id.values()).index(r_sel['customer_id']) if r_sel['customer_id'] in dict_c_nom_id.values() else 0
+                    f_cliente = st.selectbox("Cliente", list(dict_c_nom_id.keys()), index=idx_c)
+                    
+                    label_mesa_actual = dict_m_label.get(r_sel['table_id'], list(dict_m_data.keys())[0])
+                    idx_m = list(dict_m_data.keys()).index(label_mesa_actual)
+                    f_mesa = st.selectbox("Mesa", list(dict_m_data.keys()), index=idx_m)
+                with col2:
+                    f_date = st.date_input("Fecha", value=datetime.strptime(r_sel['reservation_date'], '%Y-%m-%d').date())
+                    f_time = st.time_input("Hora", value=datetime.strptime(r_sel['reservation_time'], '%H:%M:%S').time())
+                with col3:
+                    f_pax = st.number_input("Pax (Personas)", min_value=1, value=int(r_sel['pax']))
+                    estados_validos = ['confirmada', 'cancelada', 'finalizada']
+                    idx_est = estados_validos.index(r_sel['status']) if r_sel['status'] in estados_validos else 0
+                    f_status = st.selectbox("Estado", estados_validos, index=idx_est)
 
-            if st.form_submit_button("💾 Guardar Reservación"):
-                m_sel = dict_m_data[f_mesa]
-                
-                # --- VALIDACIÓN DE CAPACIDAD ---
-                if f_pax > m_sel['capacity']:
-                    st.error(f"🚫 Capacidad excedida: La Mesa {m_sel['number']} es para máximo {m_sel['capacity']} personas.")
-                    
-                    # Buscamos mesas que SI tengan la capacidad necesaria y estén libres
-                    sugerencias = [f"Mesa {m['number']} (Cap: {m['capacity']})" for m in mesas 
-                                  if m['capacity'] >= f_pax and m['status'] == 'libre']
-                    
-                    if sugerencias:
-                        st.info(f"💡 Mesas recomendadas para {f_pax} personas: " + ", ".join(sugerencias))
-                    else:
-                        st.warning("No hay mesas libres con capacidad suficiente en este momento.")
-                else:
-                    # Lógica de choque de horario (Regla de 2 horas)
-                    nueva_fh = datetime.combine(f_date, f_time)
-                    choque = False
-                    for r in reservas_raw:
-                        if r['table_id'] == m_sel['id'] and r['id'] != r_sel['id'] and r['status'] == 'confirmada':
-                            r_fh = datetime.combine(datetime.strptime(r['reservation_date'], '%Y-%m-%d').date(),
-                                                   datetime.strptime(r['reservation_time'], '%H:%M:%S').time())
-                            if abs((nueva_fh - r_fh).total_seconds()) < 7200:
-                                choque = True; break
-                    
-                    if choque:
-                        st.error("🚫 Conflicto: La mesa ya tiene una reserva en ese horario.")
-                    else:
-                        payload = {
-                            "customer_id": dict_c_nom_id[f_cliente], 
-                            "table_id": m_sel['id'], 
-                            "reservation_date": str(f_date), 
-                            "reservation_time": str(f_time), 
-                            "pax": f_pax, 
-                            "status": f_status
-                        }
-                        
-                        # Guardado en Backend
-                        if r_sel['id'] == 0:
-                            res = requests.post(f"{api_url}/reservations/", json=payload, headers=headers)
+                # --- BOTONES EN COLUMNAS ---
+                cb1, cb2 = st.columns(2)
+                with cb1:
+                    if st.form_submit_button("💾 Guardar Reservación", width="stretch"):
+                        m_sel = dict_m_data[f_mesa]
+                        if f_pax > m_sel['capacity']:
+                            st.error(f"🚫 Capacidad excedida: Máximo {m_sel['capacity']} personas.")
                         else:
-                            res = requests.put(f"{api_url}/reservations/{r_sel['id']}", json=payload, headers=headers)
-                        
-                        if res.status_code in [200, 201]:
-                            nuevo_estado_mesa = "reservada" if f_status == "confirmada" else "libre"
-                            requests.patch(f"{api_url}/tables/{m_sel['id']}/status", 
-                                           json={"status": nuevo_estado_mesa}, headers=headers)
-                            st.success("✅ Sincronizado correctamente.")
-                            python_time.sleep(1)
-                            st.rerun()
+                            payload = {
+                                "customer_id": dict_c_nom_id[f_cliente], 
+                                "table_id": m_sel['id'], 
+                                "reservation_date": str(f_date), 
+                                "reservation_time": str(f_time), 
+                                "pax": f_pax, 
+                                "status": f_status
+                            }
+                            if r_sel['id'] == 0:
+                                res = requests.post(f"{api_url}/reservations/", json=payload, headers=headers)
+                            else:
+                                res = requests.put(f"{api_url}/reservations/{r_sel['id']}", json=payload, headers=headers)
+                            
+                            if res.status_code in [200, 201]:
+                                st.success("✅ Reservación procesada correctamente.")
+                                python_time.sleep(1)
+                                st.rerun()
+                
+                with cb2:
+                    if st.form_submit_button("❌ Cancelar", width="stretch"):
+                        # Incrementamos el reset de reservas definido en app_web
+                        st.session_state.reset_reserva_select += 1
+                        st.rerun()
 
     # --- LIBERACIÓN MANUAL ---
-    st.divider()
-    st.subheader("🔓 Liberación Manual")
-    m_lib = st.selectbox("Mesa a liberar:", list(dict_m_data.keys()), key="lib_manual_res")
-    if st.button("Confirmar Liberación"):
-        m_obj = dict_m_data[m_lib]
-        if any(r['table_id'] == m_obj['id'] and r['status'] == 'confirmada' for r in reservas_raw):
-            st.error("🚫 No se puede liberar: Hay una reserva confirmada activa.")
-        else:
-            requests.patch(f"{api_url}/tables/{m_obj['id']}/release", headers=headers)
-            st.success(f"Mesa {m_obj['number']} liberada."); python_time.sleep(1); st.rerun()
+    if dict_m_data:
+        st.divider()
+        st.subheader("🔓 Liberación Manual")
+        m_lib = st.selectbox("Mesa a liberar:", list(dict_m_data.keys()), key="lib_manual_res")
+        if st.button("Confirmar Liberación"):
+            m_obj = dict_m_data[m_lib]
+            if any(r['table_id'] == m_obj['id'] and r['status'] == 'confirmada' for r in reservas_raw):
+                st.error("🚫 No se puede liberar: Hay una reserva confirmada activa.")
+            else:
+                requests.patch(f"{api_url}/tables/{m_obj['id']}/release", headers=headers)
+                st.success(f"Mesa {m_obj['number']} liberada correctamente.")
+                python_time.sleep(1)
+                st.rerun()

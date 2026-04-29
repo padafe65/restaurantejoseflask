@@ -9,7 +9,7 @@ def render_carrusel():
     fotos = ["resjose1.jpg", "resjose2.jpg", "resjose3.jpg", "resjose4.jpg", "resjose5.jpg", "resjose6.jpg"]
     
     # Refresco automático cada 5 segundos
-    count = st_autorefresh(interval=3000, key="carrusel_counter")
+    count = st_autorefresh(interval=7000, key="carrusel_counter")
     indice = count % len(fotos)
     
     if os.path.exists(img_dir):
@@ -46,7 +46,7 @@ def render_carrusel():
                 c1, c2, c3, c4, c5 = st.columns([1, 1, 2, 1, 1])
                 
                 with c3:
-                    st.image(img_final, use_container_width='stretch')
+                    st.image(img_final, width='stretch')
                     # Estilo para bordes redondeados y sombra suave
                     st.markdown("""
                         <style>
