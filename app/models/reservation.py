@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, ForeignKey, Date, Time, Enum, TIMESTAMP, Text, String
 from sqlalchemy.orm import relationship
 from app.database import Base
-import datetime
+from datetime import datetime # Importamos la clase directamente
 
 class Reservation(Base):
     __tablename__ = "reservations"
@@ -16,8 +16,9 @@ class Reservation(Base):
     pax = Column(Integer, nullable=False)
     status = Column(Enum('confirmada', 'cancelada', 'finalizada'), default='confirmada')
     
-    created_at = Column(TIMESTAMP, default=datetime.datetime.utcnow)
-    updated_at = Column(TIMESTAMP, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    # Usamos datetime.now sin paréntesis para que se ejecute en cada inserción
+    created_at = Column(TIMESTAMP, default=datetime.now)
+    updated_at = Column(TIMESTAMP, default=datetime.now, onupdate=datetime.now)
 
     customer = relationship("Customer", back_populates="reservations")
     table = relationship("Table", back_populates="reservations")
@@ -32,8 +33,9 @@ class AuditLog(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     action = Column(String(50))
     details = Column(Text)
-    change_date = Column(TIMESTAMP, default=datetime.datetime.utcnow)
+    
+    # Se eliminó la advertencia de desuso y el error de 'datetime.datetime'
+    change_date = Column(TIMESTAMP, default=datetime.now)
 
     reservation = relationship("Reservation", back_populates="logs")
-    # AQUÍ ESTABA EL ERROR: El back_populates debe decir "logs"
     operator = relationship("User", back_populates="logs")

@@ -30,6 +30,12 @@ def create_table():
     
     data = request.json
     db = next(get_db())
+    if not data.get('number') or not data.get('capacity'):
+        return jsonify({"detail": "Número y capacidad son requeridos"}), 400
+    lista_mesas = db.query(Table).all()
+    for m in lista_mesas:
+        if m.number == data.get('number'):
+            return jsonify({"detail": "Número de mesa ya existe"}), 400
     try:
         new_table = Table(
             number=data.get('number'),

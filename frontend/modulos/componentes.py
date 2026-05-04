@@ -8,7 +8,7 @@ def render_carrusel():
     img_dir = os.path.join(BASE_DIR, "imagenes")
     fotos = ["resjose1.jpg", "resjose2.jpg", "resjose3.jpg", "resjose4.jpg", "resjose5.jpg", "resjose6.jpg"]
     
-    # Refresco automático cada 5 segundos
+    # Refresco automático cada 7 segundos
     count = st_autorefresh(interval=7000, key="carrusel_counter")
     indice = count % len(fotos)
     
@@ -19,11 +19,11 @@ def render_carrusel():
             try:
                 img_original = Image.open(ruta_foto)
                 
-                # --- PROPORCIÓN DE BANNER (Ancho y corto para que no tape el login) ---
-                # Usaremos 600 de ancho por 200 de alto
-                TARGET_SIZE = (350, 250) 
+                # --- NUEVA PROPORCIÓN MÁS NATURAL (4:3 o 16:9) ---
+                # Al aumentar el alto (300 en lugar de 200), la imagen no se ve tan "aplastada"
+                TARGET_SIZE = (1200, 600) 
                 
-                # Recorte inteligente (Center Crop)
+                # Recorte inteligente (Mantenemos el aspecto pero con más nitidez)
                 w, h = img_original.size
                 target_ratio = TARGET_SIZE[0] / TARGET_SIZE[1]
                 current_ratio = w / h
@@ -37,25 +37,26 @@ def render_carrusel():
                     top = (h - new_height) / 2
                     img_res = img_original.crop((0, top, w, top + new_height))
                 
-                # Redimensionar con alta calidad
+                # Redimensionar con LANCZOS (el mejor filtro para nitidez)
                 img_final = img_res.resize(TARGET_SIZE, Image.Resampling.LANCZOS)
                 
                 # --- DISEÑO DE PANTALLA ---
-                # Usamos 5 columnas y ponemos la imagen en la del centro (3) 
-                # para que se vea pequeña y centrada
-                c1, c2, c3, c4, c5 = st.columns([1, 1, 2, 1, 1])
+                # Usamos columnas laterales más anchas para que la imagen central sea más pequeña
+                # El ratio [1.5, 2, 1.5] centra la imagen y le da un tamaño de tarjeta elegante
+                c1, c2, c3 = st.columns([1.5, 1, 1.5])
                 
-                with c3:
-                    st.image(img_final, width='stretch')
-                    # Estilo para bordes redondeados y sombra suave
+                with c2:
+                    st.image(img_final, width=400)
+                    # CSS mejorado: Sombra más profunda y borde sutil
                     st.markdown("""
                         <style>
                         [data-testid="stImage"] img {
-                            border-radius: 10px;
-                            box-shadow: 0px 2px 10px rgba(0,0,0,0.1);
+                            border-radius: 15px;
+                            box-shadow: 0px 4px 15px rgba(0,0,0,0.2);
+                            border: 1px solid #f0f2f6;
                         }
                         </style>
                     """, unsafe_allow_html=True)
                     
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error al cargar imagen: {e}")
